@@ -1,0 +1,28 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>M.A.Y.A. Isolated Workbench 10</title><style>body{font:16px system-ui;background:#10131d;color:#f4f2ff;max-width:680px;margin:auto;padding:25px}button,textarea{font:inherit;padding:12px;border-radius:9px}textarea{width:95%;background:#25293b;color:white}button{margin:5px;background:#ad9bfa;border:0}li{padding:12px;margin:8px 0;background:#25293b;border-radius:10px}small{color:#d2c9ff}</style></head><body><h1>M.A.Y.A. · Isolated Workbench</h1><p>🧪 Standalone offline demo. Synthetic test memories only. This is NOT your live Memory Core. No external agents or real owner authentication.</p><label for="candidate">Test memory candidate</label><textarea id="candidate" rows="3" placeholder="Type a fake test memory..."></textarea><p><button id="add">Stage for approval</button></p><p id="message" role="status"></p><h2>Local test records</h2><ul id="records"></ul><button id="clear">Clear all test records</button><script>
+/* M.A.Y.A. browser isolated synthetic store, no live-key access. */
+(function(root,factory){if(typeof module==='object'&&module.exports)module.exports=factory();else root.MayaIsolatedStore=factory();})(typeof globalThis!=='undefined'?globalThis:this,function(){
+ 'use strict';
+ const KEY='maya-a3a6-synthetic-workbench-v09';
+ const MAX=100;
+ const clone=x=>JSON.parse(JSON.stringify(x));
+ function createStore(storage){
+  if(!storage||typeof storage.getItem!=='function'||typeof storage.setItem!=='function')throw Error('storage_required');
+  let state={version:1,records:[]};let blocked=false;
+  function load(){
+   let raw;try{raw=storage.getItem(KEY);}catch(e){blocked=true;throw Error('storage_read_failed');}
+   if(raw===null)return clone(state);
+   try{const parsed=JSON.parse(raw);if(!parsed||parsed.version!==1||!Array.isArray(parsed.records)||parsed.records.length>MAX||!parsed.records.every(valid))throw Error('invalid_shape');state=clone(parsed);return clone(state);}
+   catch(e){blocked=true;throw Error('isolated_store_corrupt_no_overwrite');}
+  }
+  function valid(r){return r&&typeof r.id==='string'&&r.id.startsWith('test-')&&typeof r.content==='string'&&['pending_approval','approved','rejected'].includes(r.status)&&r.permissions?.external_agents==='none';}
+  function save(next){if(blocked)throw Error('isolated_store_locked');const raw=JSON.stringify(next);try{storage.setItem(KEY,raw);}catch(e){throw Error('storage_write_failed');}state=clone(next);}
+  function propose(content){if(blocked)throw Error('isolated_store_locked');if(typeof content!=='string'||!content.trim())throw Error('content_required');if(state.records.length>=MAX)throw Error('capacity_reached');const rec={id:'test-'+((typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2)),content:content.trim().slice(0,2000),status:'pending_approval',permissions:{external_agents:'none'}};save({version:1,records:[...state.records,rec]});return clone(rec);}
+  function decide(id,decision,confirmed){if(confirmed!==true)throw Error('owner_confirmation_required');if(!['approved','rejected'].includes(decision))throw Error('invalid_decision');const idx=state.records.findIndex(x=>x.id===id);if(idx<0)throw Error('not_found');if(state.records[idx].status!=='pending_approval')throw Error('already_decided');const records=clone(state.records);records[idx].status=decision;save({version:1,records});return clone(records[idx]);}
+  function clear(confirmed){if(confirmed!==true)throw Error('confirmation_required');save({version:1,records:[]});}
+  load();return Object.freeze({list:()=>clone(state.records),propose,decide,clear,key:KEY,mode:'synthetic_only'});
+ }
+ return Object.freeze({createStore,KEY});
+});
+
+</script><script>
+'use strict';const msg=document.getElementById('message'),list=document.getElementById('records');let store;try{store=MayaIsolatedStore.createStore(localStorage);}catch(e){msg.textContent='Storage unavailable or corrupted. No data overwritten: '+e.message;document.querySelectorAll('button').forEach(b=>b.disabled=true);}function render(){if(!store)return;list.replaceChildren();for(const r of store.list()){const li=document.createElement('li');const p=document.createElement('p');p.textContent=r.content;li.append(p);const status=document.createElement('small');status.textContent='Status: '+r.status+' · External access: none';li.append(status);if(r.status==='pending_approval'){for(const decision of ['approved','rejected']){const b=document.createElement('button');b.textContent=decision==='approved'?'Approve (simulation)':'Reject (simulation)';b.onclick=()=>{if(!confirm('Simulate '+decision+' for this TEST record?'))return;try{store.decide(r.id,decision,true);render();}catch(e){msg.textContent=e.message;}};li.append(b);}}list.append(li);}}document.getElementById('add').onclick=()=>{try{store.propose(document.getElementById('candidate').value);document.getElementById('candidate').value='';msg.textContent='Test record staged.';render();}catch(e){msg.textContent=e.message;}};document.getElementById('clear').onclick=()=>{if(confirm('Delete ALL synthetic test records in this workbench?')){try{store.clear(true);render();}catch(e){msg.textContent=e.message;}}};render();</script></body></html>
